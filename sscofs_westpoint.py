@@ -294,8 +294,10 @@ def build_grid(ds, box, margin=0.02):
     lon0, lon1, lat0, lat1 = box
     clon = lon[nv].mean(axis=1)
     clat = lat[nv].mean(axis=1)
-    sel = np.where((clon > lon0 - margin) & (clon < lon1 + margin) &
-                   (clat > lat0 - margin) & (clat < lat1 + margin))[0]
+    # every triangle that overlaps the box (plus margin), so the map has no gaps at its edges
+    tlon, tlat = lon[nv], lat[nv]
+    sel = np.where((tlon.max(1) > lon0 - margin) & (tlon.min(1) < lon1 + margin) &
+                   (tlat.max(1) > lat0 - margin) & (tlat.min(1) < lat1 + margin))[0]
     if sel.size == 0:
         sys.exit("No model elements inside the map box - check --box.")
     nodes, inv = np.unique(nv[sel], return_inverse=True)

@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#101418">
+<title>Puget Sound Currents</title>
+<style>
+:root{--bg:#101418;--panel:#1a222b;--line:#2c3743;--text:#e3e8ee;--dim:#8e9aa8;--accent:#ffcc33;--blue:#7fc8ff;--land:#4e4d3c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.35 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:max(10px,env(safe-area-inset-top)) 12px 28px}
+header .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h1{font-size:19px;margin:0}
+#updated{color:var(--dim);font-size:12px;text-align:right}
+nav{display:flex;gap:6px;overflow-x:auto;padding:10px 0 8px;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button,.seg button,.days button{flex:none;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font:inherit;font-size:14px}
+nav button.on,.seg button.on,.days button.on{background:#e3e8ee;color:#101418;border-color:#e3e8ee;font-weight:600}
+#clock{font-size:22px;font-weight:700;margin:2px 0 6px;font-variant-numeric:tabular-nums}
+#mapwrap{position:relative;width:100%;border-radius:10px;overflow:hidden;background:var(--land);touch-action:manipulation}
+#mapwrap canvas{position:absolute;left:0;top:0}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;background:rgba(16,20,24,.6);font-size:15px}
+#probe{position:absolute;display:none;pointer-events:none;transform:translate(-50%,-100%);margin-top:-10px;background:rgba(16,20,24,.9);color:#fff;border:1px solid #fff5;border-radius:8px;padding:4px 8px;font-size:13px;font-weight:600;white-space:nowrap}
+#probeDot{position:absolute;display:none;pointer-events:none;width:10px;height:10px;margin:-5px 0 0 -5px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #000}
+.legend{display:flex;align-items:center;gap:8px;margin:8px 0 2px;font-size:12px;color:var(--dim)}
+#cBar{flex:1;height:10px;border-radius:5px}
+.days{display:flex;gap:6px;overflow-x:auto;margin:10px 0 4px;scrollbar-width:none}
+.ctl{display:flex;align-items:center;gap:10px;margin:8px 0}
+#play{width:48px;height:40px;border-radius:10px;border:0;background:var(--accent);color:#101418;font-size:18px;font-weight:700}
+#now{height:40px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:0 12px;font:inherit}
+input[type=range]{flex:1;accent-color:var(--accent);height:30px}
+.seg{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim);margin:2px 0 10px}
+.seg button{padding:5px 11px;font-size:13px}
+#cTide{width:100%;height:120px;display:block;touch-action:none;background:var(--panel);border-radius:10px}
+.note{color:#6f7b88;font-size:12px;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top"><h1>Puget Sound Currents</h1><span id="updated"></span></div>
+    <nav id="regions"></nav>
+  </header>
+  <div id="clock">&nbsp;</div>
+  <div id="mapwrap">
+    <canvas id="cSpeed"></canvas><canvas id="cPart"></canvas><canvas id="cOver"></canvas>
+    <div id="probeDot"></div><div id="probe"></div>
+    <div id="loading">Loading…</div>
+  </div>
+  <div class="legend"><span>0</span><canvas id="cBar"></canvas><span id="vmax"></span><span>kn</span></div>
+  <div class="days" id="days"></div>
+  <div class="ctl">
+    <button id="play" aria-label="Play">&#9654;</button>
+    <input type="range" id="slider" min="0" max="1" step="300" value="0" aria-label="Time">
+    <button id="now">Now</button>
+  </div>
+  <div class="seg"><span>Play speed</span>
+    <button data-rate="5">Slow</button><button data-rate="15" class="on">Medium</button><button data-rate="30">Fast</button>
+  </div>
+  <canvas id="cTide"></canvas>
+  <p class="note">Colour = current speed. Moving streaks show the flow direction. Tap the water
+    for speed and direction at that spot; drag the tide chart to change time.
+    NOAA SSCOFS model, hourly outputs blended smoothly in between.
+    Water level is on the model's datum, not tide-table MLLW. <span id="run"></span>
+    Model guidance only &ndash; not for navigation.</p>
+</div>
+<script>
+"use strict";
+const TZ = "America/Los_Angeles";
+const $ = id => document.getElementById(id);
+const fmtClock = new Intl.DateTimeFormat("en-US", {timeZone: TZ, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+const fmtKey = new Intl.DateTimeFormat("en-CA", {timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"});
+const fmtWk = new Intl.DateTimeFormat("en-US", {timeZone: TZ, weekday: "short"});
+const fmtHour = new Intl.DateTimeFormat("en-US", {timeZone: TZ, hour: "numeric", hour12: false});
+const fmtUpd = new Intl.DateTimeFormat("en-US", {timeZone: TZ, weekday: "short", hour: "numeric", minute: "2-digit"});
+const COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const MS_TO_KN = 1.943844;
+
+let META = null, D = null, TURBO = [];
+let tCur = Date.now() / 1000, playing = false, rate = 15;   // rate: model minutes per second
+let G = null;          // geometry for current size
+let probe = null;      // {x, y} css px
+const fieldCache = new Map();
+
+function dec(s, T) {
+  const bin = atob(s), buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return new T(buf.buffer);
+}
+const hourNum = t => +fmtHour.format(new Date(t * 1000)) % 24;
+const dayKey = t => fmtKey.format(new Date(t * 1000));
+
+// ---------------------------------------------------------------- loading
+async function init() {
+  META = await (await fetch("data/regions.json?v=" + Date.now())).json();
+  TURBO = META.turbo;
+  $("updated").textContent = "Updated " + fmtUpd.format(new Date(META.updated * 1000));
+  $("run").textContent = "(" + META.run + ")";
+  const nav = $("regions");
+  for (const r of META.regions) {
+    const b = document.createElement("button");
+    b.textContent = r.tab; b.dataset.id = r.id;
+    b.onclick = () => { location.hash = r.id; };
+    nav.appendChild(b);
+  }
+  window.addEventListener("hashchange", () => loadRegion(currentId()));
+  await loadRegion(currentId());
+  requestAnimationFrame(loop);
+}
+function currentId() {
+  const h = location.hash.slice(1);
+  return META.regions.some(r => r.id === h) ? h : META.regions[0].id;
+}
+
+async function loadRegion(id) {
+  $("loading").style.display = "flex";
+  for (const b of $("regions").children) b.classList.toggle("on", b.dataset.id === id);
+  const d = await (await fetch(`data/${id}.json?v=${META.stamp}`)).json();
+  d.lonA = dec(d.lon, Float32Array); d.latA = dec(d.lat, Float32Array);
+  d.trisA = dec(d.tris, Uint32Array);
+  d.U = d.u.map(s => dec(s, Int16Array)); d.V = d.v.map(s => dec(s, Int16Array));
+  d.nt = d.trisA.length / 3; d.nn = d.lonA.length;
+  d.cnt = new Float32Array(d.nn);
+  for (let i = 0; i < d.trisA.length; i++) d.cnt[d.trisA[i]]++;
+  d.k = Math.cos(d.ref.lat * Math.PI / 180);
+  D = d; fieldCache.clear(); probe = null;
+  const s = $("slider");
+  s.min = d.times[0]; s.max = d.times[d.times.length - 1];
+  tCur = clampT(tCur);
+  $("vmax").textContent = d.vmax;
+  buildDays();
+  setup();
+  $("loading").style.display = "none";
+}
+const clampT = t => Math.min(D.times[D.times.length - 1], Math.max(D.times[0], t));
+
+// ---------------------------------------------------------------- geometry
+function setup() {
+  const wrap = $("mapwrap"), dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const [lon0, lon1, lat0, lat1] = D.box;
+  const W = wrap.clientWidth;
+  const H = Math.round(W * (lat1 - lat0) / ((lon1 - lon0) * D.k));
+  wrap.style.height = H + "px";
+  for (const id of ["cSpeed", "cPart", "cOver"]) {
+    const c = $(id); c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+    c.style.width = W + "px"; c.style.height = H + "px";
+    c.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  const px = new Float32Array(D.nn), py = new Float32Array(D.nn);
+  for (let i = 0; i < D.nn; i++) {
+    px[i] = (D.lonA[i] - lon0) / (lon1 - lon0) * W;
+    py[i] = (lat1 - D.latA[i]) / (lat1 - lat0) * H;
+  }
+  // velocity sampling grid (~3 css px cells) with barycentric weights
+  const GW = Math.min(260, Math.round(W / 3)), GH = Math.max(2, Math.round(GW * H / W));
+  const cw = W / GW, ch = H / GH;
+  const cellTri = new Int32Array(GW * GH).fill(-1);
+  const wts = new Float32Array(GW * GH * 3);
+  const T = D.trisA;
+  for (let t = 0; t < D.nt; t++) {
+    const a = T[3*t], b = T[3*t+1], c = T[3*t+2];
+    const ax = px[a], ay = py[a], bx = px[b], by = py[b], cx = px[c], cy = py[c];
+    const det = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+    if (Math.abs(det) < 1e-9) continue;
+    const i0 = Math.max(0, Math.floor(Math.min(ax, bx, cx) / cw - 0.5));
+    const i1 = Math.min(GW - 1, Math.ceil(Math.max(ax, bx, cx) / cw - 0.5));
+    const j0 = Math.max(0, Math.floor(Math.min(ay, by, cy) / ch - 0.5));
+    const j1 = Math.min(GH - 1, Math.ceil(Math.max(ay, by, cy) / ch - 0.5));
+    for (let j = j0; j <= j1; j++) {
+      const y = (j + 0.5) * ch;
+      for (let i = i0; i <= i1; i++) {
+        const x = (i + 0.5) * cw;
+        const l1 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / det;
+        const l2 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / det;
+        const l3 = 1 - l1 - l2;
+        if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) {
+          const n = j * GW + i;
+          cellTri[n] = t; wts[3*n] = l1; wts[3*n+1] = l2; wts[3*n+2] = l3;
+        }
+      }
+    }
+  }
+  const water = [];
+  for (let n = 0; n < cellTri.length; n++) if (cellTri[n] >= 0) water.push(n);
+  const N = Math.min(3000, Math.round(W * H / 110));
+  G = {W, H, dpr, px, py, GW, GH, cw, ch, cellTri, wts, water: Int32Array.from(water),
+       N, x: new Float32Array(N), y: new Float32Array(N), age: new Float32Array(N), life: new Float32Array(N),
+       pxPerMS: 42 * W / 400, lastSpeedDraw: 0, lastSpeedT: -1};
+  fieldCache.clear();
+  for (let i = 0; i < N; i++) spawn(i, true);
+  $("cPart").getContext("2d").clearRect(0, 0, W, H);
+  drawOverlay(); drawBar(); drawSpeed(true); drawTide(); updateText();
+}
+
+function spawn(i, randomAge) {
+  if (!G.water.length) return;
+  const n = G.water[(Math.random() * G.water.length) | 0];
+  G.x[i] = ((n % G.GW) + Math.random()) * G.cw;
+  G.y[i] = (((n / G.GW) | 0) + Math.random()) * G.ch;
+  G.life[i] = 1.5 + Math.random() * 3;
+  G.age[i] = randomAge ? Math.random() * G.life[i] : 0;
+}
+
+// ---------------------------------------------------------------- fields
+function bracket(t) {
+  const T = D.times;
+  if (t <= T[0]) return [0, 0, 0];
+  if (t >= T[T.length - 1]) return [T.length - 1, T.length - 1, 0];
+  let lo = 0, hi = T.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m] <= t) lo = m; else hi = m; }
+  return [lo, hi, (t - T[lo]) / (T[hi] - T[lo])];
+}
+function gridField(h) {          // hour index -> velocity on sampling grid (m/s), NaN on land
+  if (fieldCache.has(h)) return fieldCache.get(h);
+  const s = 1 / D.uvScale, U = D.U[h], V = D.V[h], T = D.trisA;
+  const nu = new Float32Array(D.nn), nv = new Float32Array(D.nn);
+  for (let t = 0; t < D.nt; t++) {
+    const u = U[t] * s, v = V[t] * s;
+    for (let k = 0; k < 3; k++) { const n = T[3*t+k]; nu[n] += u; nv[n] += v; }
+  }
+  for (let n = 0; n < D.nn; n++) { const c = D.cnt[n] || 1; nu[n] /= c; nv[n] /= c; }
+  const M = G.GW * G.GH, gu = new Float32Array(M), gv = new Float32Array(M);
+  for (let n = 0; n < M; n++) {
+    const t = G.cellTri[n];
+    if (t < 0) { gu[n] = NaN; gv[n] = NaN; continue; }
+    const a = T[3*t], b = T[3*t+1], c = T[3*t+2], w = G.wts;
+    gu[n] = w[3*n] * nu[a] + w[3*n+1] * nu[b] + w[3*n+2] * nu[c];
+    gv[n] = w[3*n] * nv[a] + w[3*n+1] * nv[b] + w[3*n+2] * nv[c];
+  }
+  const f = {gu, gv};
+  fieldCache.set(h, f);
+  if (fieldCache.size > 6) fieldCache.delete(fieldCache.keys().next().value);
+  return f;
+}
+function sampleGrid(f, x, y) {   // bilinear; falls back to nearest cell near the shore
+  const gx = x / G.cw - 0.5, gy = y / G.ch - 0.5;
+  const i = Math.floor(gx), j = Math.floor(gy);
+  if (i < 0 || j < 0 || i >= G.GW - 1 || j >= G.GH - 1) {
+    const ni = Math.round(gx), nj = Math.round(gy);
+    if (ni < 0 || nj < 0 || ni >= G.GW || nj >= G.GH) return null;
+    const n = nj * G.GW + ni;
+    return isNaN(f.gu[n]) ? null : [f.gu[n], f.gv[n]];
+  }
+  const fx = gx - i, fy = gy - j, n = j * G.GW + i;
+  const a = n, b = n + 1, c = n + G.GW, d = n + G.GW + 1, U = f.gu, V = f.gv;
+  if (isNaN(U[a]) || isNaN(U[b]) || isNaN(U[c]) || isNaN(U[d])) {
+    const m = (fy < 0.5 ? j : j + 1) * G.GW + (fx < 0.5 ? i : i + 1);
+    return isNaN(U[m]) ? null : [U[m], V[m]];
+  }
+  const w1 = (1 - fx) * (1 - fy), w2 = fx * (1 - fy), w3 = (1 - fx) * fy, w4 = fx * fy;
+  return [U[a]*w1 + U[b]*w2 + U[c]*w3 + U[d]*w4, V[a]*w1 + V[b]*w2 + V[c]*w3 + V[d]*w4];
+}
+function velocityAt(x, y) {
+  const [h0, h1, w] = bracket(tCur);
+  const a = sampleGrid(gridField(h0), x, y);
+  if (!a) return null;
+  if (w === 0 || h0 === h1) return a;
+  const b = sampleGrid(gridField(h1), x, y);
+  if (!b) return a;
+  return [a[0] * (1 - w) + b[0] * w, a[1] * (1 - w) + b[1] * w];
+}
+
+// ---------------------------------------------------------------- drawing
+function drawSpeed(force) {
+  const now = performance.now();
+  if (!force && (tCur === G.lastSpeedT || now - G.lastSpeedDraw < 90)) return;
+  G.lastSpeedDraw = now; G.lastSpeedT = tCur;
+  const ctx = $("cSpeed").getContext("2d");
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--land");
+  ctx.fillRect(0, 0, G.W, G.H);
+  const [h0, h1, w] = bracket(tCur), s = MS_TO_KN / D.uvScale;
+  const U0 = D.U[h0], V0 = D.V[h0], U1 = D.U[h1], V1 = D.V[h1];
+  const NB = TURBO.length, bucket = new Uint8Array(D.nt), count = new Int32Array(NB + 1);
+  for (let t = 0; t < D.nt; t++) {
+    const u = U0[t] * (1 - w) + U1[t] * w, v = V0[t] * (1 - w) + V1[t] * w;
+    const b = Math.min(NB - 1, Math.max(0, Math.floor(Math.hypot(u, v) * s / D.vmax * NB)));
+    bucket[t] = b; count[b + 1]++;
+  }
+  for (let b = 0; b < NB; b++) count[b + 1] += count[b];
+  const order = new Int32Array(D.nt), pos = count.slice();
+  for (let t = 0; t < D.nt; t++) order[pos[bucket[t]]++] = t;
+  const T = D.trisA, px = G.px, py = G.py;
+  ctx.lineWidth = 0.9; ctx.lineJoin = "round";
+  for (let b = 0; b < NB; b++) {
+    if (count[b] === count[b + 1]) continue;
+    ctx.beginPath();
+    for (let k = count[b]; k < count[b + 1]; k++) {
+      const t = order[k], a = T[3*t], c = T[3*t+1], e = T[3*t+2];
+      ctx.moveTo(px[a], py[a]); ctx.lineTo(px[c], py[c]); ctx.lineTo(px[e], py[e]); ctx.closePath();
+    }
+    ctx.fillStyle = ctx.strokeStyle = TURBO[b];
+    ctx.fill(); ctx.stroke();
+  }
+}
+
+function stepParticles(dt) {
+  const ctx = $("cPart").getContext("2d");
+  ctx.globalCompositeOperation = "destination-in";
+  ctx.fillStyle = "rgba(0,0,0,0.90)";
+  ctx.fillRect(0, 0, G.W, G.H);
+  ctx.globalCompositeOperation = "source-over";
+  const [h0, h1, w] = bracket(tCur);
+  const f0 = gridField(h0), f1 = h1 !== h0 ? gridField(h1) : null;
+  const k = G.pxPerMS * dt;
+  ctx.beginPath();
+  for (let i = 0; i < G.N; i++) {
+    const x = G.x[i], y = G.y[i];
+    let v = sampleGrid(f0, x, y);
+    if (v && f1 && w > 0) {
+      const v1 = sampleGrid(f1, x, y);
+      if (v1) v = [v[0] * (1 - w) + v1[0] * w, v[1] * (1 - w) + v1[1] * w];
+    }
+    G.age[i] += dt;
+    if (!v || G.age[i] > G.life[i]) { spawn(i, false); continue; }
+    // screen speed ~ sqrt(current speed): slack water still drifts visibly,
+    // fast water doesn't smear into long streaks (colour carries the speed)
+    const sp = Math.hypot(v[0], v[1]), g = sp > 1e-6 ? k / Math.sqrt(sp) : 0;
+    const nx = x + v[0] * g, ny = y - v[1] * g;
+    if (nx < 0 || ny < 0 || nx > G.W || ny > G.H) { spawn(i, false); continue; }
+    ctx.moveTo(x, y); ctx.lineTo(nx, ny);
+    G.x[i] = nx; G.y[i] = ny;
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.88)";
+  ctx.lineWidth = 1.3; ctx.lineCap = "round";
+  ctx.stroke();
+}
+
+function lx(lon) { return (lon - D.box[0]) / (D.box[1] - D.box[0]) * G.W; }
+function ly(lat) { return (D.box[3] - lat) / (D.box[3] - D.box[2]) * G.H; }
+
+function drawOverlay() {
+  const ctx = $("cOver").getContext("2d");
+  ctx.clearRect(0, 0, G.W, G.H);
+  // depth contours (feet)
+  ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 0.8;
+  ctx.font = "10px -apple-system,system-ui,sans-serif"; ctx.fillStyle = "rgba(255,255,255,0.55)";
+  const placed = [];
+  for (const c of D.contours) {
+    let best = null;
+    for (const L of c.lines) {
+      ctx.beginPath();
+      for (let i = 0; i < L.length; i += 2) {
+        const x = lx(L[i]), y = ly(L[i+1]);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+      if (!best || L.length > best.length) best = L;
+    }
+    if (best) {
+      const m = 2 * Math.floor(best.length / 4);
+      const x = lx(best[m]), y = ly(best[m+1]);
+      if (x > 14 && x < G.W - 40 && y > 12 && y < G.H - 6 &&
+          placed.every(p => Math.hypot(p[0] - x, p[1] - y) > 45)) {
+        ctx.fillText(c.ft + " ft", x + 2, y - 2); placed.push([x, y]);
+      }
+    }
+  }
+  // place labels
+  for (const L of D.labels) {
+    const x = lx(L.lon), y = ly(L.lat);
+    if (x < 0 || y < 0 || x > G.W || y > G.H) continue;
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.85)"; ctx.shadowBlur = 3;
+    if (L.kind === "ref" || L.kind === "spot") {
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      if (L.kind === "ref") star(ctx, x, y, 7, 3); else ctx.arc(x, y, 3.5, 0, 7);
+      ctx.fill(); ctx.stroke();
+      ctx.font = "600 13px -apple-system,system-ui,sans-serif";
+      const tw = ctx.measureText(L.name).width;
+      const tx = x + 8 + tw > G.W ? x - 8 - tw : x + 8;
+      ctx.fillText(L.name, tx, y + 14);
+    } else {
+      ctx.font = "italic 12px -apple-system,system-ui,sans-serif";
+      ctx.fillStyle = L.kind === "land" ? "#ece5c8" : "rgba(255,255,255,0.9)";
+      ctx.textAlign = "center"; ctx.fillText(L.name, x, y);
+    }
+    ctx.restore();
+  }
+  // scale bar
+  const mPerPx = (D.box[1] - D.box[0]) * D.k * 111320 / G.W;
+  const opts = [[152.4, "500 ft"], [304.8, "1000 ft"], [402.3, "¼ mi"], [804.7, "½ mi"], [1609.3, "1 mi"], [3218.7, "2 mi"]];
+  let pick = opts[0];
+  for (const o of opts) if (o[0] / mPerPx <= G.W * 0.28) pick = o;
+  const len = pick[0] / mPerPx, x0 = 12, y0 = G.H - 14;
+  ctx.save(); ctx.shadowColor = "#000"; ctx.shadowBlur = 3;
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + len, y0); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.font = "11px -apple-system,system-ui,sans-serif";
+  ctx.fillText(pick[1], x0, y0 - 6);
+  // north arrow
+  const nx = G.W - 18, ny = 30;
+  ctx.beginPath(); ctx.moveTo(nx, ny - 14); ctx.lineTo(nx - 6, ny); ctx.lineTo(nx + 6, ny); ctx.closePath(); ctx.fill();
+  ctx.textAlign = "center"; ctx.fillText("N", nx, ny + 13);
+  ctx.restore();
+}
+function star(ctx, x, y, r1, r2) {
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? r2 : r1, a = -Math.PI / 2 + i * Math.PI / 5;
+    i ? ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)) : ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a));
+  }
+  ctx.closePath();
+}
+
+function drawBar() {
+  const c = $("cBar"), dpr = G.dpr, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const ctx = c.getContext("2d"), g = ctx.createLinearGradient(0, 0, c.width, 0);
+  TURBO.forEach((col, i) => g.addColorStop(i / (TURBO.length - 1), col));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height);
+}
+
+function drawTide() {
+  const c = $("cTide"), dpr = G.dpr, W = c.clientWidth, H = c.clientHeight;
+  if (c.width !== Math.round(W * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const T = D.times, Z = D.zetaFt, t0 = T[0], t1 = T[T.length - 1];
+  const L = 34, R = 10, top = 22, bot = 22;
+  const zmin = Math.min(...Z), zmax = Math.max(...Z), pad = (zmax - zmin) * 0.1 || 1;
+  const X = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const Y = z => top + (1 - (z - zmin + pad) / (zmax - zmin + 2 * pad)) * (H - top - bot);
+  ctx.font = "10px -apple-system,system-ui,sans-serif";
+  // night shading and day labels
+  for (let t = t0; t <= t1; t += 3600) {
+    const hr = hourNum(t);
+    if (hr < 7 || hr >= 20) { ctx.fillStyle = "rgba(0,0,0,0.28)"; ctx.fillRect(X(t), top, X(Math.min(t1, t + 3600)) - X(t) + 0.5, H - top - bot); }
+    if (hr === 0 && t > t0) { ctx.strokeStyle = "#3a4654"; ctx.beginPath(); ctx.moveTo(X(t), top); ctx.lineTo(X(t), H - bot); ctx.stroke(); }
+    if (hr === 12) { ctx.fillStyle = "#9aa6b4"; ctx.textAlign = "center"; ctx.fillText(fmtWk.format(new Date(t * 1000)), X(t), H - 7); }
+  }
+  // y labels
+  ctx.fillStyle = "#8e9aa8"; ctx.textAlign = "right";
+  for (const z of [zmin, (zmin + zmax) / 2, zmax]) ctx.fillText(z.toFixed(1), L - 5, Y(z) + 3);
+  ctx.textAlign = "left"; ctx.fillText("ft", 4, top - 8);
+  // curve
+  ctx.strokeStyle = "#7fc8ff"; ctx.lineWidth = 1.8; ctx.beginPath();
+  T.forEach((t, i) => i ? ctx.lineTo(X(t), Y(Z[i])) : ctx.moveTo(X(t), Y(Z[i])));
+  ctx.stroke();
+  // cursor
+  const [h0, h1, w] = bracket(tCur), zc = Z[h0] * (1 - w) + Z[h1] * w, xc = X(tCur);
+  ctx.strokeStyle = "#ffcc33"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(xc, top - 4); ctx.lineTo(xc, H - bot); ctx.stroke();
+  ctx.fillStyle = "#ffcc33"; ctx.beginPath(); ctx.arc(xc, Y(zc), 4, 0, 7); ctx.fill();
+  ctx.font = "600 12px -apple-system,system-ui,sans-serif";
+  ctx.textAlign = xc > W - 70 ? "right" : "left";
+  ctx.fillText(zc.toFixed(1) + " ft", xc + (xc > W - 70 ? -6 : 6), top - 6);
+  G.tideX = {X, L, R, W, t0, t1};
+}
+
+function buildDays() {
+  const box = $("days"); box.innerHTML = "";
+  const keys = [];
+  for (const t of D.times) { const k = dayKey(t); if (!keys.includes(k)) keys.push(k); }
+  const today = dayKey(Date.now() / 1000);
+  const tomorrow = dayKey(Date.now() / 1000 + 86400);
+  for (const k of keys) {
+    const first = D.times.find(t => dayKey(t) === k && hourNum(t) >= 7) ?? D.times.find(t => dayKey(t) === k);
+    const b = document.createElement("button");
+    b.dataset.key = k;
+    b.textContent = k === today ? "Today" : k === tomorrow ? "Tomorrow" : fmtWk.format(new Date(first * 1000));
+    b.onclick = () => { setTime(first); };
+    box.appendChild(b);
+  }
+}
+
+function updateText() {
+  $("clock").textContent = fmtClock.format(new Date(tCur * 1000));
+  const s = $("slider");
+  if (document.activeElement !== s || playing) s.value = tCur;
+  const k = dayKey(tCur);
+  for (const b of $("days").children) b.classList.toggle("on", b.dataset.key === k);
+  updateProbe();
+}
+
+function updateProbe() {
+  const box = $("probe"), dot = $("probeDot");
+  if (!probe) { box.style.display = dot.style.display = "none"; return; }
+  const v = velocityAt(probe.x, probe.y);
+  if (!v) { probe = null; box.style.display = dot.style.display = "none"; return; }
+  const kn = Math.hypot(v[0], v[1]) * MS_TO_KN;
+  const brg = (Math.atan2(v[0], v[1]) * 180 / Math.PI + 360) % 360;
+  box.textContent = kn < 0.05 ? "slack (<0.1 kn)" : `${kn.toFixed(1)} kn toward ${COMPASS[Math.round(brg / 22.5) % 16]}`;
+  box.style.display = dot.style.display = "block";
+  box.style.left = dot.style.left = probe.x + "px";
+  box.style.top = dot.style.top = probe.y + "px";
+}
+
+function setTime(t, keepPlaying) {
+  tCur = clampT(t);
+  if (!keepPlaying) setPlaying(false);
+  drawSpeed(true); drawTide(); updateText();
+}
+function setPlaying(p) {
+  playing = p;
+  $("play").innerHTML = p ? "&#10074;&#10074;" : "&#9654;";
+}
+
+// ---------------------------------------------------------------- loop & input
+let last = 0;
+function loop(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+  if (D && G) {
+    if (playing) {
+      tCur += dt * rate * 60;
+      if (tCur >= D.times[D.times.length - 1]) tCur = D.times[0];
+      drawSpeed(false); drawTide(); updateText();
+    }
+    stepParticles(dt);
+  }
+  requestAnimationFrame(loop);
+}
+
+$("play").onclick = () => {
+  if (!playing && tCur >= D.times[D.times.length - 1]) tCur = D.times[0];
+  setPlaying(!playing);
+};
+$("now").onclick = () => setTime(Date.now() / 1000);
+$("slider").addEventListener("input", e => setTime(+e.target.value));
+for (const b of document.querySelectorAll(".seg button")) {
+  b.onclick = () => {
+    rate = +b.dataset.rate;
+    for (const o of document.querySelectorAll(".seg button")) o.classList.toggle("on", o === b);
+  };
+}
+$("cOver").addEventListener("click", e => {
+  const r = $("cOver").getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (probe && Math.hypot(probe.x - x, probe.y - y) < 16) probe = null;
+  else probe = velocityAt(x, y) ? {x, y} : null;
+  updateProbe();
+});
+function tideFromEvent(e) {
+  const r = $("cTide").getBoundingClientRect(), T = G.tideX;
+  const f = Math.min(1, Math.max(0, (e.clientX - r.left - T.L) / (T.W - T.L - T.R)));
+  setTime(Math.round((T.t0 + f * (T.t1 - T.t0)) / 300) * 300);
+}
+let tideDrag = false;
+$("cTide").addEventListener("pointerdown", e => { tideDrag = true; $("cTide").setPointerCapture(e.pointerId); tideFromEvent(e); });
+$("cTide").addEventListener("pointermove", e => { if (tideDrag) tideFromEvent(e); });
+$("cTide").addEventListener("pointerup", () => { tideDrag = false; });
+let rt = null;
+window.addEventListener("resize", () => {   // iOS fires resize on scroll; only rebuild on width change
+  clearTimeout(rt);
+  rt = setTimeout(() => { if (D && G && $("mapwrap").clientWidth !== G.W) setup(); }, 200);
+});
+
+init().catch(err => { $("loading").textContent = "Couldn't load data: " + err.message; });
+</script>
+</body>
+</html>

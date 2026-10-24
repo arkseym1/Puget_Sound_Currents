@@ -105,6 +105,26 @@ REGIONS = {
                 ("Useless Bay", -122.495, 47.968, "water"),
                 ("Puget Sound", -122.475, 47.915, "water"),
                 ("Whidbey Island", -122.405, 47.965, "land")]),
+    "golden-gardens": dict(
+        title="Golden Gardens",
+        box=(-122.440, -122.380, 47.672, 47.708),
+        ref=(-122.4055, 47.6915),
+        vmax=2.0,
+        labels=[("Golden Gardens", -122.4055, 47.6915, "ref"),
+                ("North Beach", -122.392, 47.7015, "spot"),
+                ("Shilshole Marina", -122.4075, 47.680, "water"),
+                ("Puget Sound", -122.428, 47.690, "water")]),
+    "richmond-edmonds": dict(
+        title="Richmond Beach to Edmonds",
+        box=(-122.445, -122.360, 47.755, 47.816),
+        ref=(-122.3865, 47.7665),
+        vmax=2.0,
+        labels=[("Richmond Beach", -122.3865, 47.7665, "ref"),
+                ("Point Wells", -122.3975, 47.7785, "spot"),
+                ("Marina Beach Park", -122.3935, 47.8045, "spot"),
+                ("Edmonds", -122.376, 47.812, "land"),
+                ("Woodway", -122.375, 47.790, "land"),
+                ("Puget Sound", -122.425, 47.785, "water")]),
 }
 REGION = REGIONS["westpoint"]      # set from --region in main()
 
@@ -631,7 +651,7 @@ def main():
     ap.add_argument("--source", choices=["auto", "dap", "s3"], default="auto")
     ap.add_argument("--files", nargs="+", help="use local SSCOFS fields files instead")
     ap.add_argument("--keep-downloads", action="store_true")
-    ap.add_argument("--fps", type=float, default=6, help="playback frames per second")
+    ap.add_argument("--fps", type=float, default=3, help="playback frames per second")
     ap.add_argument("--out", default="westpoint_output")
     ap.add_argument("--name", help="output file name stem (default westpoint_<start>)")
     ap.add_argument("--html-only", action="store_true", help="skip the GIF and MP4")

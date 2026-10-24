@@ -1,6 +1,6 @@
 # Puget Sound Currents
 
-Animated current maps for West Point (Seattle) and Double Bluff / Maxwelton / Point No Point, from NOAA's
+Animated current maps for West Point, Golden Gardens, Richmond Beach–Edmonds and Double Bluff / Maxwelton / Point No Point, from NOAA's
 Salish Sea and Columbia River Operational Forecast System (SSCOFS), drawn on
 the model's native ~100 m triangle mesh.
 

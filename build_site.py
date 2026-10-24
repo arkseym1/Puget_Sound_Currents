@@ -11,6 +11,8 @@ TZ = ZoneInfo("America/Los_Angeles")
 OUT = "site"
 REGIONS = [  # (region id for sscofs_westpoint.py --region, heading on the index page)
     ("westpoint", "West Point"),
+    ("golden-gardens", "Golden Gardens"),
+    ("richmond-edmonds", "Richmond Beach to Edmonds"),
     ("useless-bay", "Double Bluff · Maxwelton · Point No Point"),
 ]
 DAYS = int(os.environ.get("DAYS", 3))

@@ -58,7 +58,7 @@ input[type=range]{flex:1;accent-color:var(--accent);height:30px}
     <button id="now">Now</button>
   </div>
   <div class="seg"><span>Play speed</span>
-    <button data-rate="5">Slow</button><button data-rate="15" class="on">Medium</button><button data-rate="30">Fast</button>
+    <button data-rate="5">Slow</button><button data-rate="30" class="on">Medium</button><button data-rate="60">Fast</button>
   </div>
   <canvas id="cTide"></canvas>
   <p class="note">Colour = current speed. Moving streaks show the flow direction. Tap the water
@@ -80,7 +80,7 @@ const COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW",
 const MS_TO_KN = 1.943844;
 
 let META = null, D = null, TURBO = [];
-let tCur = Date.now() / 1000, playing = false, rate = 15;   // rate: model minutes per second
+let tCur = Date.now() / 1000, playing = false, rate = 30;   // rate: model minutes per second
 let G = null;          // geometry for current size
 let probe = null;      // {x, y} css px
 const fieldCache = new Map();

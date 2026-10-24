@@ -8,6 +8,8 @@ on:
     - cron: "17 14 * * *"
     - cron: "17 20 * * *"
   workflow_dispatch:        # "Run workflow" button for an on-demand refresh
+  push:                     # rebuild whenever the code changes
+    branches: [main]
 
 permissions:
   contents: read

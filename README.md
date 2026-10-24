@@ -1,7 +1,7 @@
 # Puget Sound Currents
 
 Live, animated current maps for West Point, Golden Gardens, Richmond Beach–Edmonds
-and Double Bluff / Maxwelton / Point No Point, from NOAA's Salish Sea and Columbia
+Double Bluff / Maxwelton / Point No Point, Admiralty Inlet and West Beach, from NOAA's Salish Sea and Columbia
 River Operational Forecast System (SSCOFS), on the model's native triangle mesh.
 
 A GitHub Actions job runs after each of NOAA's four daily model runs. It pulls the

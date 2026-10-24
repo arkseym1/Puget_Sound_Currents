@@ -34,6 +34,8 @@ SITE_REGIONS = [  # (area id in sscofs_westpoint.REGIONS, tab name)
     ("golden-gardens", "Golden Gardens"),
     ("richmond-edmonds", "Richmond Beach – Edmonds"),
     ("useless-bay", "Double Bluff · Maxwelton · Pt No Point"),
+    ("admiralty-inlet", "Admiralty Inlet"),
+    ("west-beach", "West Beach"),
 ]
 DEPTH_FT = [10, 30, 60, 100, 200, 400, 600]
 UV_SCALE = 1000          # stored as int16 mm/s

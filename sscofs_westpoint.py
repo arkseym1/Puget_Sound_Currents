@@ -126,6 +126,30 @@ REGIONS = {
                 ("Edmonds", -122.376, 47.812, "land"),
                 ("Woodway", -122.375, 47.790, "land"),
                 ("Puget Sound", -122.425, 47.785, "water")]),
+    "admiralty-inlet": dict(
+        title="Admiralty Inlet",
+        box=(-122.840, -122.590, 48.080, 48.185),
+        ref=(-122.7546, 48.1443),
+        vmax=5.0,
+        labels=[("Point Wilson", -122.7546, 48.1443, "ref"),
+                ("Keystone Ferry", -122.672, 48.156, "spot"),
+                ("Marrowstone Pt", -122.688, 48.101, "spot"),
+                ("Port Townsend", -122.762, 48.116, "land"),
+                ("Fort Casey", -122.682, 48.166, "land"),
+                ("Admiralty Inlet", -122.716, 48.137, "water"),
+                ("Admiralty Bay", -122.635, 48.150, "water"),
+                ("Port Townsend Bay", -122.752, 48.093, "water")]),
+    "west-beach": dict(
+        title="West Beach",
+        box=(-122.880, -122.640, 48.245, 48.385),
+        ref=(-122.7245, 48.2960),
+        vmax=4.0,
+        labels=[("West Beach", -122.7235, 48.2960, "ref"),
+                ("Moran's Beach", -122.661, 48.373, "spot"),
+                ("Smith Island", -122.835, 48.318, "spot"),
+                ("Oak Harbor", -122.650, 48.284, "land"),
+                ("Whidbey Island", -122.672, 48.320, "land"),
+                ("Strait of Juan de Fuca", -122.790, 48.355, "water")]),
 }
 REGION = REGIONS["westpoint"]      # set from --region in main()
 

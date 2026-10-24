@@ -75,6 +75,7 @@ except Exception:      # Windows has no built-in time zone database
     sys.exit("Time zone data missing. Run:  pip install tzdata")
 CYCLES = (3, 9, 15, 21)
 MS_TO_KN = 1.943844
+M_TO_FT = 3.28084
 R_EARTH = 6371000.0
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "sscofs_westpoint")
 
@@ -526,10 +527,10 @@ class Renderer:
         # water level panel
         tl = [t.astimezone(LOCAL_TZ) for t in self.ts]
         tax.set_facecolor("#101418")
-        tax.plot(tl, self.zs, color="#7fc8ff", lw=1.5)
+        tax.plot(tl, np.array(self.zs) * M_TO_FT, color="#7fc8ff", lw=1.5)
         tax.axvline(lt, color="#ffcc33", lw=1.5)
-        tax.plot([lt], [f.zeta], "o", color="#ffcc33")
-        tax.set_ylabel("water level (m)", color="#ccd", fontsize=8)
+        tax.plot([lt], [f.zeta * M_TO_FT], "o", color="#ffcc33")
+        tax.set_ylabel("water level (ft)", color="#ccd", fontsize=8)
         tax.tick_params(colors="#9aa", labelsize=7)
         span = (self.ts[-1] - self.ts[0]).total_seconds() / 3600 if len(self.ts) > 1 else 1
         iv = max(1, int(np.ceil(span / 6)))
@@ -651,7 +652,7 @@ def main():
     ap.add_argument("--source", choices=["auto", "dap", "s3"], default="auto")
     ap.add_argument("--files", nargs="+", help="use local SSCOFS fields files instead")
     ap.add_argument("--keep-downloads", action="store_true")
-    ap.add_argument("--fps", type=float, default=3, help="playback frames per second")
+    ap.add_argument("--fps", type=float, default=1, help="playback frames per second")
     ap.add_argument("--out", default="westpoint_output")
     ap.add_argument("--name", help="output file name stem (default westpoint_<start>)")
     ap.add_argument("--html-only", action="store_true", help="skip the GIF and MP4")

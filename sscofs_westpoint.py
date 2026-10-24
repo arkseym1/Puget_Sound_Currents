@@ -485,8 +485,21 @@ class Renderer:
         # lon component scaled so directions are true with the map's aspect)
         U = self.grid_interp(self.to_nodes(f.u / self.k))
         V = self.grid_interp(self.to_nodes(f.v))
-        ax.streamplot(self.X, self.Y, U, V, density=2.2, color="white",
-                      linewidth=0.6, arrowsize=0.7)
+        ax.streamplot(self.X, self.Y, U, V, density=1.8, color="white",
+                      linewidth=0.7, arrowsize=1.4)
+        # bold direction arrows on a coarse grid: fixed length, so direction is
+        # readable on a phone even where the current is weak
+        ny, nx = self.X.shape
+        st = max(1, nx // 11)
+        sl = (slice(st // 2, None, st), slice(st // 2, None, st))
+        ue, vn = U[sl] * self.k, V[sl]            # back to true east/north components
+        mag = np.hypot(ue, vn)
+        ok = np.isfinite(mag) & (mag > 1e-4)
+        if ok.any():
+            ax.quiver(self.X[sl][ok], self.Y[sl][ok], ue[ok] / mag[ok], vn[ok] / mag[ok],
+                      angles="uv", pivot="middle", scale=30, width=0.007,
+                      headwidth=3.2, headlength=3.6, headaxislength=3.2,
+                      color="#ffffff", edgecolor="#000000", linewidth=0.8, zorder=4)
 
         for name, x, y, kind in REGION["labels"]:
             if lon0 < x < lon1 and lat0 < y < lat1:

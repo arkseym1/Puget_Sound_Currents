@@ -1,6 +1,6 @@
-# West Point Currents
+# Puget Sound Currents
 
-Animated current maps for the water off West Point (Seattle), from NOAA's
+Animated current maps for West Point (Seattle) and Double Bluff / Maxwelton / Point No Point, from NOAA's
 Salish Sea and Columbia River Operational Forecast System (SSCOFS), drawn on
 the model's native ~100 m triangle mesh.
 

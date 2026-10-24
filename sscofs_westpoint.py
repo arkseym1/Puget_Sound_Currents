@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-sscofs_westpoint.py - animated current maps off West Point (Seattle) from
+sscofs_westpoint.py - animated current maps for West Point (Seattle) and other
+Puget Sound spots (--region), from
 NOAA's Salish Sea and Columbia River Operational Forecast System (SSCOFS),
 drawn on the model's own triangular mesh (no resampling to a coarse grid).
 
@@ -8,7 +9,7 @@ What it shows
   * Current speed, coloured per mesh triangle (native ~100 m model resolution)
   * Streamlines of the flow, so eddies and reversals stand out
   * Depth contours from the model's bathymetry
-  * Water level at West Point over the window, with the current frame marked
+  * Water level at the region's reference point over the window, with the current frame marked
 
 Data
   NOAA publishes SSCOFS four times a day (03, 09, 15, 21 UTC). Each run has
@@ -31,6 +32,7 @@ Examples:
     python sscofs_westpoint.py --start "2026-10-20 13:00" --hours 4   # a past session
     python sscofs_westpoint.py --layer depthavg --mesh          # depth-averaged, show mesh
     python sscofs_westpoint.py --files a.nc b.nc                # local SSCOFS files
+    python sscofs_westpoint.py --region useless-bay             # Double Bluff / Maxwelton / Point No Point
 
 Outputs (in --out, default ./westpoint_output):
     westpoint_<start>.html   scrub/play viewer (open in any browser, works on phone)
@@ -71,8 +73,6 @@ try:
     LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 except Exception:      # Windows has no built-in time zone database
     sys.exit("Time zone data missing. Run:  pip install tzdata")
-WEST_POINT = (-122.4357, 47.6619)               # lighthouse lon, lat
-DEFAULT_BOX = (-122.495, -122.385, 47.635, 47.695)  # lon0, lon1, lat0, lat1
 CYCLES = (3, 9, 15, 21)
 MS_TO_KN = 1.943844
 R_EARTH = 6371000.0
@@ -81,12 +81,32 @@ CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "sscofs_westpoint")
 DAP_BASE = "https://opendap.co-ops.nos.noaa.gov/thredds/dodsC/NOAA/SSCOFS/MODELS"
 S3_BASE = "https://noaa-nos-ofs-pds.s3.amazonaws.com/sscofs/netcdf"
 
-LABELS = [
-    ("West Point", WEST_POINT[0], WEST_POINT[1], "water"),
-    ("Shilshole Bay", -122.412, 47.684, "water"),
-    ("Discovery Park", -122.418, 47.657, "land"),
-    ("Puget Sound", -122.475, 47.645, "water"),
-]
+# Map areas. box = (lon0, lon1, lat0, lat1); ref = point where water level is
+# plotted; label kinds: "ref" (star), "spot" (dot), "water", "land".
+REGIONS = {
+    "westpoint": dict(
+        title="West Point",
+        box=(-122.495, -122.385, 47.635, 47.695),
+        ref=(-122.4357, 47.6619),
+        vmax=2.0,
+        labels=[("West Point", -122.4357, 47.6619, "ref"),
+                ("Shilshole Bay", -122.412, 47.684, "water"),
+                ("Discovery Park", -122.418, 47.657, "land"),
+                ("Puget Sound", -122.475, 47.645, "water")]),
+    "useless-bay": dict(
+        title="Double Bluff / Maxwelton / Point No Point",
+        box=(-122.565, -122.375, 47.890, 48.000),
+        ref=(-122.452, 47.943),
+        vmax=2.5,
+        labels=[("Double Bluff Beach", -122.514, 47.979, "spot"),
+                ("Maxwelton", -122.448, 47.939, "ref"),
+                ("Point No Point", -122.5266, 47.9122, "spot"),
+                ("Sunlight Beach", -122.482, 47.989, "spot"),
+                ("Useless Bay", -122.495, 47.968, "water"),
+                ("Puget Sound", -122.475, 47.915, "water"),
+                ("Whidbey Island", -122.405, 47.965, "land")]),
+}
+REGION = REGIONS["westpoint"]      # set from --region in main()
 
 
 # --------------------------------------------------------------------------
@@ -235,7 +255,7 @@ class Grid:
     e0: int                  # contiguous global element range to read
     e1: int
     eloc: np.ndarray         # positions of our elements inside [e0:e1]
-    wp_node: int             # global node index nearest West Point
+    wp_node: int             # global node index nearest the region reference point
     min_edge_m: float
     med_edge_m: float
 
@@ -260,13 +280,13 @@ def build_grid(ds, box, margin=0.02):
     nodes, inv = np.unique(nv[sel], return_inverse=True)
     tris = inv.reshape(-1, 3)
 
-    d = (lon - WEST_POINT[0]) ** 2 * np.cos(np.radians(WEST_POINT[1])) ** 2 + \
-        (lat - WEST_POINT[1]) ** 2
+    rx, ry = REGION["ref"]
+    d = (lon - rx) ** 2 * np.cos(np.radians(ry)) ** 2 + (lat - ry) ** 2
     wp = int(np.argmin(d))
 
     # mesh spacing inside the box, for the record
     sl, sa = lon[nodes], lat[nodes]
-    k = np.cos(np.radians(WEST_POINT[1]))
+    k = np.cos(np.radians(REGION["ref"][1]))
     edges = []
     for a, b in ((0, 1), (1, 2), (2, 0)):
         dx = (sl[tris[:, a]] - sl[tris[:, b]]) * k
@@ -360,7 +380,7 @@ class Renderer:
     def __init__(self, g, box, vmax, show_mesh, layer, all_frames):
         self.g, self.box, self.vmax, self.mesh, self.layer = g, box, vmax, show_mesh, layer
         self.tri = mtri.Triangulation(g.lon, g.lat, g.tris)
-        self.k = np.cos(np.radians(WEST_POINT[1]))
+        self.k = np.cos(np.radians(REGION["ref"][1]))
         lon0, lon1, lat0, lat1 = box
         nx = 260
         ny = int(nx * (lat1 - lat0) / ((lon1 - lon0) * self.k))
@@ -447,14 +467,15 @@ class Renderer:
         ax.streamplot(self.X, self.Y, U, V, density=2.2, color="white",
                       linewidth=0.6, arrowsize=0.7)
 
-        for name, x, y, where in LABELS:
+        for name, x, y, kind in REGION["labels"]:
             if lon0 < x < lon1 and lat0 < y < lat1:
-                if name == "West Point":
-                    ax.plot(x, y, marker="*", ms=10, color="white", mec="k", zorder=5)
+                if kind in ("ref", "spot"):
+                    ax.plot(x, y, marker="*" if kind == "ref" else "o",
+                            ms=10 if kind == "ref" else 5, color="white", mec="k", zorder=5)
                     ax.annotate(name, (x, y), xytext=(6, -12), textcoords="offset points",
                                 color="white", fontsize=9, weight="bold")
                 else:
-                    ax.text(x, y, name, color="white" if where == "water" else "#e8e2c8",
+                    ax.text(x, y, name, color="white" if kind == "water" else "#e8e2c8",
                             fontsize=8, ha="center", alpha=0.85, style="italic")
 
         ax.set_xlim(lon0, lon1)
@@ -479,7 +500,7 @@ class Renderer:
         lyr = "surface layer" if self.layer == "surface" else "depth-averaged"
         fig.text(0.6 / W, 1 - 0.45 / H, f"{lt:%a %b %d  %I:%M %p %Z}", color="white", fontsize=16,
                  weight="bold")
-        fig.text(0.6 / W, 1 - 0.72 / H, f"West Point - SSCOFS {lyr} currents, native mesh  "
+        fig.text(0.6 / W, 1 - 0.72 / H, f"{REGION['title']} - SSCOFS {lyr} currents, native mesh  "
                  f"({f.label})", color="#aab", fontsize=8.5)
 
         # water level panel
@@ -507,7 +528,7 @@ class Renderer:
 
 HTML = """<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>West Point Currents</title>
+<title>__TITLE__ Currents</title>
 <style>
 body{margin:0;background:#101418;color:#dde;font:14px -apple-system,system-ui,sans-serif}
 .wrap{max-width:900px;margin:0 auto;padding:12px 16px}
@@ -546,6 +567,7 @@ def write_outputs(pngs, frames, out_dir, stem, run_note, fps, html_only=False, b
                 .replace("__N__", str(len(pngs) - 1))
                 .replace("__MS__", str(int(1000 / fps)))
                 .replace("__RUN__", run_note)
+                .replace("__TITLE__", REGION["title"])
                 .replace("__BACK__", f'<a href="{back}" style="color:#7fc8ff">&larr; All days</a>'
                          if back else ""))
     hp = os.path.join(out_dir, stem + ".html")
@@ -600,9 +622,11 @@ def main():
                     help="frames per model hour, blended in time for smoother playback "
                          "(default 3; 1 = model hours only)")
     ap.add_argument("--layer", choices=["surface", "depthavg"], default="surface")
-    ap.add_argument("--vmax", type=float, default=2.0, help="top of speed scale, knots")
+    ap.add_argument("--region", choices=sorted(REGIONS), default="westpoint",
+                    help="map area (default westpoint)")
+    ap.add_argument("--vmax", type=float, help="top of speed scale, knots (default per region)")
     ap.add_argument("--box", type=float, nargs=4, metavar=("LON0", "LON1", "LAT0", "LAT1"),
-                    default=DEFAULT_BOX, help="map extent")
+                    help="custom map extent (overrides the region's)")
     ap.add_argument("--mesh", action="store_true", help="draw the model's triangle mesh")
     ap.add_argument("--source", choices=["auto", "dap", "s3"], default="auto")
     ap.add_argument("--files", nargs="+", help="use local SSCOFS fields files instead")
@@ -614,7 +638,10 @@ def main():
     ap.add_argument("--back-link", help="URL for an 'All days' link at the top of the viewer")
     a = ap.parse_args()
 
-    box = tuple(a.box)
+    global REGION
+    REGION = REGIONS[a.region]
+    box = tuple(a.box) if a.box else REGION["box"]
+    vmax = a.vmax or REGION["vmax"]
     if a.files:
         sources = [(os.path.basename(p), "local", p) for p in a.files]
         run_note = "from local files"
@@ -643,10 +670,10 @@ def main():
     print("Reading model output ...")
     grid, frames = load_frames(sources, box, a.layer, a.keep_downloads)
     shown = interp_frames(frames, a.smooth)
-    r = Renderer(grid, box, a.vmax, a.mesh, a.layer, frames)
+    r = Renderer(grid, box, vmax, a.mesh, a.layer, frames)
     print(f"Drawing {len(shown)} frames ...")
     pngs = [r.draw(f) for f in shown]
-    stem = a.name or "westpoint_" + frames[0].t.astimezone(LOCAL_TZ).strftime("%Y%m%d_%H%M")
+    stem = a.name or a.region + "_" + frames[0].t.astimezone(LOCAL_TZ).strftime("%Y%m%d_%H%M")
     for p in write_outputs(pngs, shown, a.out, stem, run_note, a.fps, a.html_only, a.back_link):
         print("  wrote", p)
 

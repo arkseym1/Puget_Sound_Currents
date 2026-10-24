@@ -149,10 +149,14 @@ def main():
         if rid not in grids:
             continue
         R, g, d = S.REGIONS[rid], grids[rid], data[rid]
+        # never let the colour scale cap the data: raise it in 0.5 kn steps if needed
+        peak = max(float(np.hypot(d["u"][k], d["v"][k]).max()) for k in keep) * S.MS_TO_KN
+        vmax = max(R["vmax"], np.ceil(peak * 2) / 2)
+        print(f"  {rid}: peak {peak:.2f} kn, scale 0-{vmax:g} kn")
         q = lambda arrs: [b64(np.clip(np.round(arrs[k] * UV_SCALE), -32767, 32767)
                               .astype("<i2")) for k in keep]
         out = {
-            "id": rid, "title": R["title"], "box": R["box"], "vmax": R["vmax"],
+            "id": rid, "title": R["title"], "box": R["box"], "vmax": float(vmax),
             "ref": {"lon": R["ref"][0], "lat": R["ref"][1]},
             "labels": [{"name": n, "lon": x, "lat": y, "kind": kd} for n, x, y, kd in R["labels"]],
             "lon": b64(g.lon.astype("<f4")), "lat": b64(g.lat.astype("<f4")),

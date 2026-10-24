@@ -188,7 +188,7 @@ function setup() {
   const N = Math.min(3000, Math.round(W * H / 110));
   G = {W, H, dpr, px, py, GW, GH, cw, ch, cellTri, wts, water: Int32Array.from(water),
        N, x: new Float32Array(N), y: new Float32Array(N), age: new Float32Array(N), life: new Float32Array(N),
-       pxPerMS: 42 * W / 400, lastSpeedDraw: 0, lastSpeedT: -1};
+       pxPerMS: 21 * W / 400, lastSpeedDraw: 0, lastSpeedT: -1};
   fieldCache.clear();
   for (let i = 0; i < N; i++) spawn(i, true);
   $("cPart").getContext("2d").clearRect(0, 0, W, H);

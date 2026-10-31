@@ -33,6 +33,7 @@ import sscofs_westpoint as S
 SITE_REGIONS = [  # (area id in sscofs_westpoint.REGIONS, tab name)
     ("westpoint", "West Point"),
     ("golden-gardens", "Golden Gardens"),
+    ("westpoint-goldengardens", "West Point–Golden Gardens"),
     ("richmond-edmonds", "Richmond–Edmonds"),
     ("useless-bay", "Double Bluff–Pt No Point"),
     ("admiralty-inlet", "Admiralty Inlet"),

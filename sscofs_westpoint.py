@@ -150,6 +150,20 @@ REGIONS = {
                 ("Oak Harbor", -122.650, 48.284, "land"),
                 ("Whidbey Island", -122.672, 48.320, "land"),
                 ("Strait of Juan de Fuca", -122.790, 48.355, "water")]),
+    "westpoint-goldengardens": dict(
+        title="West Point - Golden Gardens",
+        box=(-122.530, -122.385, 47.623, 47.708),
+        ref=(-122.4357, 47.6619),
+        vmax=3.0,
+        labels=[("West Point", -122.4357, 47.6619, "ref"),
+                ("Golden Gardens", -122.4055, 47.6915, "spot"),
+                ("Fay Bainbridge Park", -122.5065, 47.7005, "spot"),
+                ("Shilshole Bay", -122.414, 47.678, "water"),
+                ("Murden Cove", -122.502, 47.638, "water"),
+                ("Puget Sound", -122.470, 47.680, "water"),
+                ("Discovery Park", -122.414, 47.657, "land"),
+                ("Magnolia", -122.401, 47.640, "land"),
+                ("Bainbridge Island", -122.523, 47.668, "land")]),
 }
 REGION = REGIONS["westpoint"]      # set from --region in main()
 

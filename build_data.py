@@ -19,6 +19,7 @@ import base64
 import json
 import os
 import shutil
+import time
 from datetime import datetime, timezone
 
 import numpy as np
@@ -39,6 +40,9 @@ SITE_REGIONS = [  # (area id in sscofs_westpoint.REGIONS, tab name)
 ]
 DEPTH_FT = [10, 30, 60, 100, 200, 400, 600]
 UV_SCALE = 1000          # stored as int16 mm/s
+RETRIES = 4              # tries per hourly file before skipping it
+RETRY_WAIT = 20          # seconds; grows with each attempt (20, 40, 60)
+MAX_SKIP_FRACTION = 0.2  # fail the update (keep the old site) if more than this many hours are lost
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -102,8 +106,12 @@ def main():
                     if fc else "nowcast")
 
     grids, data, times = {}, {}, []
-    for i, (name, kind, url) in enumerate(sources, 1):
-        print(f"  [{i}/{len(sources)}] {name}", flush=True)
+    e0 = e1 = None
+    failed = []
+
+    def read_hour(name, kind, url):
+        """Read one hourly file into grids/data/times. Raises on any read problem."""
+        nonlocal e0, e1
         ds, cleanup = S.open_any(kind, url, False)
         try:
             if not grids:
@@ -121,19 +129,50 @@ def main():
                     raise SystemExit("No areas overlap the model mesh.")
                 e0 = min(g.e0 for g in grids.values())
                 e1 = max(g.e1 for g in grids.values())
+            # read everything for this hour first, then commit, so a failure
+            # part-way through never leaves the areas out of step
+            t = S.file_time(ds)
             u_all = S.arr(ds.variables["u"][0, 0, e0:e1]).astype(np.float32)
             v_all = S.arr(ds.variables["v"][0, 0, e0:e1]).astype(np.float32)
-            for rid, g in grids.items():
-                idx = g.e0 - e0 + g.eloc
-                data[rid]["u"].append(np.nan_to_num(u_all[idx]))
-                data[rid]["v"].append(np.nan_to_num(v_all[idx]))
-                z = float(S.arr(ds.variables["zeta"][0, g.wp_node:g.wp_node + 1])[0])
-                data[rid]["z"].append(z)
-            times.append(S.file_time(ds))
+            zs = {rid: float(S.arr(ds.variables["zeta"][0, g.wp_node:g.wp_node + 1])[0])
+                  for rid, g in grids.items()}
         finally:
-            ds.close()
-            if cleanup:
+            try:
+                ds.close()
+            except Exception:
+                pass
+            if cleanup and os.path.exists(cleanup):
                 os.remove(cleanup)
+        for rid, g in grids.items():
+            idx = g.e0 - e0 + g.eloc
+            data[rid]["u"].append(np.nan_to_num(u_all[idx]))
+            data[rid]["v"].append(np.nan_to_num(v_all[idx]))
+            data[rid]["z"].append(zs[rid])
+        times.append(t)
+
+    for i, (name, kind, url) in enumerate(sources, 1):
+        print(f"  [{i}/{len(sources)}] {name}", flush=True)
+        for attempt in range(1, RETRIES + 1):
+            try:
+                read_hour(name, kind, url)
+                break
+            except SystemExit:
+                raise
+            except Exception as e:                      # NOAA server hiccup, timeout, etc.
+                print(f"    attempt {attempt}/{RETRIES} failed: {type(e).__name__}: {e}", flush=True)
+                if attempt < RETRIES:
+                    time.sleep(RETRY_WAIT * attempt)
+        else:
+            print(f"    giving up on {name}; the viewer will blend across this hour", flush=True)
+            failed.append(name)
+
+    if not times:
+        raise SystemExit("Couldn't read any model hours - keeping the previously published site.")
+    if len(failed) > MAX_SKIP_FRACTION * len(sources):
+        raise SystemExit(f"{len(failed)} of {len(sources)} hours failed - keeping the "
+                         f"previously published site rather than publishing a patchy one.")
+    if failed:
+        print(f"  WARNING: skipped {len(failed)} hour(s): {', '.join(failed)}")
 
     order = np.argsort([t.timestamp() for t in times])
     keep, seen = [], set()

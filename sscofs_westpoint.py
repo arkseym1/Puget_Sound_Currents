@@ -164,6 +164,20 @@ REGIONS = {
                 ("Discovery Park", -122.414, 47.657, "land"),
                 ("Magnolia", -122.401, 47.640, "land"),
                 ("Bainbridge Island", -122.523, 47.668, "land")]),
+    "deception-pass": dict(
+        title="Deception Pass",
+        box=(-122.672, -122.606, 48.393, 48.421),
+        ref=(-122.6445, 48.4063),
+        vmax=8.0,
+        labels=[("Deception Pass Bridge", -122.6445, 48.4063, "ref"),
+                ("Lighthouse Point", -122.6595, 48.4085, "spot"),
+                ("North Beach", -122.6560, 48.4010, "spot"),
+                ("Strawberry Is.", -122.6328, 48.4067, "spot"),
+                ("Ben Ure Is.", -122.6297, 48.4022, "spot"),
+                ("Bowman Bay", -122.6555, 48.4160, "water"),
+                ("Cornet Bay", -122.6255, 48.3975, "water"),
+                ("Fidalgo Island", -122.6380, 48.4165, "land"),
+                ("Whidbey Island", -122.6470, 48.3960, "land")]),
 }
 REGION = REGIONS["westpoint"]      # set from --region in main()
 

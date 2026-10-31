@@ -38,6 +38,7 @@ SITE_REGIONS = [  # (area id in sscofs_westpoint.REGIONS, tab name)
     ("useless-bay", "Double Bluff–Pt No Point"),
     ("admiralty-inlet", "Admiralty Inlet"),
     ("west-beach", "West Beach"),
+    ("deception-pass", "Deception Pass"),
 ]
 DEPTH_FT = [10, 30, 60, 100, 200, 400, 600]
 UV_SCALE = 1000          # stored as int16 mm/s
